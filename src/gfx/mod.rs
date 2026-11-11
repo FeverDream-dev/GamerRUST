@@ -4,9 +4,11 @@
 //! Frame lifecycle is owned here so a game can never forget to present:
 //! [`Graphics::begin_frame`] acquires the target and bakes the clear color
 //! into the encoder, [`Graphics::end_frame`] submits and presents (or stages
-//! the headless readback copy). A throwaway clearing pass is recorded in
-//! `begin_frame`; later milestones (M3 batcher, M7 text) record `Load`-passes
-//! on the same view between the two calls.
+//! the headless readback copy). Pipelines (M3 batcher, M7 text) record
+//! `Load`-passes on the same view between the two calls via
+//! [`Graphics::with_frame`].
+
+pub mod batch2d;
 
 use std::sync::Arc;
 
@@ -39,10 +41,73 @@ struct Offscreen {
 /// In-flight frame state between `begin_frame` and `end_frame`.
 struct Frame {
     encoder: wgpu::CommandEncoder,
-    /// Held for M3+ render passes (sprites/text/3D draw into this view).
-    #[expect(dead_code)]
     view: wgpu::TextureView,
     surface_texture: Option<wgpu::SurfaceTexture>,
+}
+
+/// A 2D texture uploaded to the GPU. Created from CPU RGBA8 pixels via
+/// [`Texture::from_rgba`]; drawn through [`crate::gfx::SpriteBatch`].
+pub struct Texture {
+    pub(crate) view: wgpu::TextureView,
+    pub(crate) sampler: wgpu::Sampler,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl Texture {
+    /// Upload 8-bit RGBA pixels (top-left origin, row-major).
+    pub fn from_rgba(gfx: &Graphics, width: u32, height: u32, data: &[u8]) -> Self {
+        assert_eq!(data.len(), (width * height * 4) as usize, "rgba8 data size");
+        let texture = gfx.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("gamerrust.texture"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        gfx.queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            data,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(width * 4),
+                rows_per_image: None,
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+        );
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let sampler = gfx.device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("gamerrust.sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+        Self {
+            view,
+            sampler,
+            width,
+            height,
+        }
+    }
 }
 
 impl Graphics {
@@ -226,6 +291,17 @@ impl Graphics {
             view,
             surface_texture,
         });
+    }
+
+    /// Record GPU commands into the current frame between `begin_frame` and
+    /// `end_frame` (the hook sprite/text/3D pipelines draw through).
+    /// `None` when no frame is in flight (e.g. skipped surface acquire).
+    pub fn with_frame<R>(
+        &mut self,
+        f: impl FnOnce(&mut wgpu::CommandEncoder, &wgpu::TextureView) -> R,
+    ) -> Option<R> {
+        let frame = self.frame.as_mut()?;
+        Some(f(&mut frame.encoder, &frame.view))
     }
 
     /// Submit the frame: present when windowed; stage the texture→buffer

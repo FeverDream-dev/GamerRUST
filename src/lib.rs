@@ -35,7 +35,9 @@ pub mod prelude {
     pub use crate::audio::AudioSystem;
     pub use crate::camera::{Camera2D, Camera3D};
     pub use crate::collision2d::{swept_aabb, Aabb, Circle};
+    pub use crate::gfx::batch2d::{Sprite, SpriteBatch};
     pub use crate::gfx::Graphics;
+    pub use crate::gfx::Texture;
     pub use crate::input::{
         ButtonState, GamepadAxis, GamepadButton, Input, Key, MouseButton as EngineMouseButton,
     };
