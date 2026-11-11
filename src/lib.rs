@@ -20,6 +20,7 @@
 
 pub mod audio;
 pub mod collision2d;
+pub mod time;
 
 /// Everything a game needs in one `use gamerrust::prelude::*;`.
 ///
