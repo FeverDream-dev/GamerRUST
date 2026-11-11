@@ -15,7 +15,7 @@ struct CubeDemo {
 impl Game for CubeDemo {
     fn init(ctx: &mut Context) -> Self {
         let gfx = ctx.gfx();
-        let renderer = gfx.map(Renderer3d::new);
+        let renderer = gfx.map(|g| Renderer3d::new(g));
         let mesh = gfx.map(|g| MeshData::cube().upload(g));
         Self {
             renderer,

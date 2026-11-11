@@ -142,7 +142,7 @@ impl MeshData {
                 data.positions.push(p);
                 data.normals.push(n);
             }
-            data.indices.extend(mesh.indices.iter().map(|&i| i as u32));
+            data.indices.extend(mesh.indices.iter().map(|&i| i));
         }
         Ok(data)
     }
