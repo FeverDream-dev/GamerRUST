@@ -20,6 +20,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Linux audio (alsa-sys via rodio) needs the ALSA headers.
+      - name: Install Linux native deps
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+
       - name: Install Rust toolchain (stable)
         uses: dtolnay/rust-toolchain@stable
         with:
