@@ -20,8 +20,10 @@
 
 pub mod app;
 pub mod audio;
+pub mod camera;
 pub mod collision2d;
 pub mod gfx;
+pub mod input;
 pub mod time;
 
 /// Everything a game needs in one `use gamerrust::prelude::*;`.
@@ -31,8 +33,12 @@ pub mod time;
 pub mod prelude {
     pub use crate::app::{Context, Engine, Game};
     pub use crate::audio::AudioSystem;
+    pub use crate::camera::{Camera2D, Camera3D};
     pub use crate::collision2d::{swept_aabb, Aabb, Circle};
     pub use crate::gfx::Graphics;
+    pub use crate::input::{
+        ButtonState, GamepadAxis, GamepadButton, Input, Key, MouseButton as EngineMouseButton,
+    };
     pub use crate::time::{FixedStep, Time};
-    pub use glam::Vec2;
+    pub use glam::{Vec2, Vec3};
 }

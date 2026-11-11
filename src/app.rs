@@ -11,6 +11,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crate::gfx::Graphics;
+use crate::input::Input;
 use crate::time::{FixedStep, Time};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
@@ -31,6 +32,7 @@ pub struct Context<'a> {
     pub(crate) exit: &'a mut bool,
     window: Option<&'a Window>,
     gfx: Option<&'a mut Graphics>,
+    input: Option<&'a mut Input>,
 }
 
 impl<'a> Context<'a> {
@@ -39,12 +41,14 @@ impl<'a> Context<'a> {
         exit: &'a mut bool,
         window: Option<&'a Window>,
         gfx: Option<&'a mut Graphics>,
+        input: Option<&'a mut Input>,
     ) -> Self {
         Self {
             time,
             exit,
             window,
             gfx,
+            input,
         }
     }
 
@@ -62,6 +66,11 @@ impl<'a> Context<'a> {
     /// CI): games should early-return from `draw` when this is `None`.
     pub fn gfx(&mut self) -> Option<&mut Graphics> {
         self.gfx.as_deref_mut()
+    }
+
+    /// The input subsystem (keyboard/mouse/gamepad).
+    pub fn input(&mut self) -> Option<&mut Input> {
+        self.input.as_deref_mut()
     }
 }
 
@@ -133,6 +142,7 @@ impl Engine {
             game: None,
             window: None,
             gfx: None,
+            input: Input::new(),
             fixed: FixedStep::new(1.0 / FIXED_HZ),
             time: Time::with_fixed_hz(FIXED_HZ),
             last: Instant::now(),
@@ -151,6 +161,7 @@ struct Runner<G: Game> {
     game: Option<G>,
     window: Option<Arc<Window>>,
     gfx: Option<Graphics>,
+    input: Input,
     fixed: FixedStep,
     time: Time,
     last: Instant,
@@ -170,6 +181,7 @@ impl<G: Game> Runner<G> {
                 &mut self.exit,
                 self.window.as_deref(),
                 self.gfx.as_mut(),
+                Some(&mut self.input),
             );
             game.update(&mut ctx, self.time.fixed_delta);
         }
@@ -187,12 +199,14 @@ impl<G: Game> Runner<G> {
                 &mut self.exit,
                 self.window.as_deref(),
                 self.gfx.as_mut(),
+                Some(&mut self.input),
             );
             game.draw(&mut ctx, alpha);
         }
         if let Some(gfx) = self.gfx.as_mut() {
             gfx.end_frame();
         }
+        self.input.end_frame();
         if self.exit {
             event_loop.exit();
         }
@@ -221,12 +235,14 @@ impl<G: Game> ApplicationHandler for Runner<G> {
                 &mut self.exit,
                 self.window.as_deref(),
                 self.gfx.as_mut(),
+                Some(&mut self.input),
             );
             self.game = Some(G::init(&mut ctx));
         }
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+        self.input.handle_window_event(&event);
         match event {
             WindowEvent::CloseRequested => self.exit = true,
             WindowEvent::Resized(size) => {
@@ -242,6 +258,7 @@ impl<G: Game> ApplicationHandler for Runner<G> {
                         &mut self.exit,
                         self.window.as_deref(),
                         self.gfx.as_mut(),
+                        Some(&mut self.input),
                     );
                     game.event(&mut ctx, other);
                 }
@@ -264,6 +281,8 @@ impl<G: Game> ApplicationHandler for Runner<G> {
         if dt > 1e-6 {
             self.time.fps = self.time.fps * 0.9 + (1.0 / dt) * 0.1;
         }
+
+        self.input.poll_gamepads();
 
         let steps = self.fixed.tick(dt);
         for _ in 0..steps {
