@@ -18,16 +18,19 @@
 //! - `mesh` — .obj loading (M8)
 //! -->
 
+pub mod app;
 pub mod audio;
 pub mod collision2d;
 pub mod time;
 
 /// Everything a game needs in one `use gamerrust::prelude::*;`.
 ///
-/// Later milestones append their headline types here (`Engine`, `Game`,
-/// `Camera2D`, `Input`, `Audio`, ...) as they land.
+/// Later milestones append their headline types here (`Camera2D`, `Input`,
+/// `mesh`, ...) as they land.
 pub mod prelude {
+    pub use crate::app::{Context, Engine, Game};
     pub use crate::audio::AudioSystem;
     pub use crate::collision2d::{swept_aabb, Aabb, Circle};
+    pub use crate::time::{FixedStep, Time};
     pub use glam::Vec2;
 }
