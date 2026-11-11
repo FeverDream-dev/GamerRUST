@@ -117,3 +117,39 @@ fn camera_offset_moves_sprite() {
     // Screen (24, 8) → world (8, -24): outside vertically.
     assert_eq!(pixel(&data, 24, 8), [0, 0, 0, 255], "above shifted sprite");
 }
+
+// ---- M7: text pixel assert (same headless harness) ----
+
+use gamerrust::gfx::text::{Text, TextContext};
+
+#[test]
+fn text_renders_visible_pixels() {
+    let Some(mut gfx) = Graphics::headless(128, 64) else {
+        eprintln!("skip: no GPU adapter");
+        return;
+    };
+    let mut text = TextContext::new(&gfx);
+    // Big white text on black: some pixels must be non-black after render.
+    gfx.clear_color([0.0, 0.0, 0.0, 1.0]);
+    gfx.begin_frame();
+    text.draw(Text::new(Vec2::new(8.0, 8.0), "GAMERRUST").size(32.0));
+    text.flush(&mut gfx);
+    gfx.end_frame();
+
+    let data = gfx.read_pixels().expect("read pixels");
+    let bpr = (128u32 * 4).next_multiple_of(256) as usize;
+    let mut lit = 0;
+    for y in 0..64 {
+        for x in 0..128 {
+            let i = y * bpr + x * 4;
+            if data[i] > 40 || data[i + 1] > 40 || data[i + 2] > 40 {
+                lit += 1;
+            }
+        }
+    }
+    // 32px glyphs cover at least a few percent of a 128x64 target.
+    assert!(
+        lit > 200,
+        "text rendered only {lit} lit pixels — glyphs missing?"
+    );
+}

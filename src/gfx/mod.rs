@@ -9,6 +9,7 @@
 //! [`Graphics::with_frame`].
 
 pub mod batch2d;
+pub mod text;
 
 use std::sync::Arc;
 
