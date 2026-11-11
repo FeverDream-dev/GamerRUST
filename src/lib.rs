@@ -24,6 +24,7 @@ pub mod camera;
 pub mod collision2d;
 pub mod gfx;
 pub mod input;
+pub mod mesh;
 pub mod time;
 
 /// Everything a game needs in one `use gamerrust::prelude::*;`.
@@ -36,6 +37,8 @@ pub mod prelude {
     pub use crate::camera::{Camera2D, Camera3D};
     pub use crate::collision2d::{swept_aabb, Aabb, Circle};
     pub use crate::gfx::batch2d::{Sprite, SpriteBatch};
+    pub use crate::gfx::render3d::{DirectionalLight, Draw3d, Renderer3d};
+    pub use crate::gfx::text::{Text, TextContext};
     pub use crate::gfx::Graphics;
     pub use crate::gfx::Texture;
     pub use crate::input::{
