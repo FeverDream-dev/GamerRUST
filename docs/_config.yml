@@ -1,0 +1,6 @@
+title: GamerRUST
+description: A batteries-included 2D and 3D game engine for Rust.
+theme: minima
+markdown: kramdown
+repository: FeverDream-dev/GamerRUST
+show_downloads: true
