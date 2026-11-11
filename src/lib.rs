@@ -21,6 +21,7 @@
 pub mod app;
 pub mod audio;
 pub mod collision2d;
+pub mod gfx;
 pub mod time;
 
 /// Everything a game needs in one `use gamerrust::prelude::*;`.
@@ -31,6 +32,7 @@ pub mod prelude {
     pub use crate::app::{Context, Engine, Game};
     pub use crate::audio::AudioSystem;
     pub use crate::collision2d::{swept_aabb, Aabb, Circle};
+    pub use crate::gfx::Graphics;
     pub use crate::time::{FixedStep, Time};
     pub use glam::Vec2;
 }

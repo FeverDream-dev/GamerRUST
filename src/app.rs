@@ -7,8 +7,10 @@
 //! loop itself reach the game via [`Game::event`].
 
 use std::error::Error;
+use std::sync::Arc;
 use std::time::Instant;
 
+use crate::gfx::Graphics;
 use crate::time::{FixedStep, Time};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
@@ -22,17 +24,28 @@ const FIXED_HZ: f32 = 60.0;
 ///
 /// A fresh `Context` is built per engine phase (event, each fixed update,
 /// draw); it borrows the live subsystems from the runner, so it is cheap and
-/// short-lived. Fields grow as subsystems land (`gfx` in M2, `input` in M4).
+/// short-lived. Fields grow as subsystems land (`input` in M4).
 pub struct Context<'a> {
     /// Snapshot of the frame timing (delta, elapsed, fps, fixed step).
     pub time: Time,
     pub(crate) exit: &'a mut bool,
     window: Option<&'a Window>,
+    gfx: Option<&'a mut Graphics>,
 }
 
 impl<'a> Context<'a> {
-    pub(crate) fn new(time: Time, exit: &'a mut bool, window: Option<&'a Window>) -> Self {
-        Self { time, exit, window }
+    pub(crate) fn new(
+        time: Time,
+        exit: &'a mut bool,
+        window: Option<&'a Window>,
+        gfx: Option<&'a mut Graphics>,
+    ) -> Self {
+        Self {
+            time,
+            exit,
+            window,
+            gfx,
+        }
     }
 
     /// Ask the engine to shut down after the current phase.
@@ -43,6 +56,12 @@ impl<'a> Context<'a> {
     /// The active window. `None` only in headless scenarios.
     pub fn window(&self) -> Option<&Window> {
         self.window
+    }
+
+    /// The graphics subsystem. `None` when no GPU adapter was found (headless
+    /// CI): games should early-return from `draw` when this is `None`.
+    pub fn gfx(&mut self) -> Option<&mut Graphics> {
+        self.gfx.as_deref_mut()
     }
 }
 
@@ -65,8 +84,6 @@ pub trait Game: Sized {
 pub struct Engine {
     title: String,
     size: (u32, u32),
-    /// Consumed by the graphics context (M2) to pick the present mode.
-    #[allow(dead_code)] // read by `Graphics` starting M2
     vsync: bool,
 }
 
@@ -115,6 +132,7 @@ impl Engine {
             cfg: self,
             game: None,
             window: None,
+            gfx: None,
             fixed: FixedStep::new(1.0 / FIXED_HZ),
             time: Time::with_fixed_hz(FIXED_HZ),
             last: Instant::now(),
@@ -127,11 +145,12 @@ impl Engine {
     }
 }
 
-/// Everything the event loop owns: window, game state, timing.
+/// Everything the event loop owns: window, game state, timing, graphics.
 struct Runner<G: Game> {
     cfg: Engine,
     game: Option<G>,
-    window: Option<Window>,
+    window: Option<Arc<Window>>,
+    gfx: Option<Graphics>,
     fixed: FixedStep,
     time: Time,
     last: Instant,
@@ -145,19 +164,34 @@ impl<G: Game> Runner<G> {
     /// One fixed update tick. Disjoint-field borrows let `game` and the
     /// context coexist without cloning state.
     fn update_step(&mut self) {
-        // `let` pattern to keep the mutable game borrow scoped.
         if let Some(game) = self.game.as_mut() {
-            let mut ctx = Context::new(self.time, &mut self.exit, self.window.as_ref());
+            let mut ctx = Context::new(
+                self.time,
+                &mut self.exit,
+                self.window.as_deref(),
+                self.gfx.as_mut(),
+            );
             game.update(&mut ctx, self.time.fixed_delta);
         }
     }
 
     fn draw_frame(&mut self, event_loop: &ActiveEventLoop) {
         self.frames += 1;
+        if let Some(gfx) = self.gfx.as_mut() {
+            gfx.begin_frame();
+        }
         if let Some(game) = self.game.as_mut() {
             let alpha = self.fixed.alpha();
-            let mut ctx = Context::new(self.time, &mut self.exit, self.window.as_ref());
+            let mut ctx = Context::new(
+                self.time,
+                &mut self.exit,
+                self.window.as_deref(),
+                self.gfx.as_mut(),
+            );
             game.draw(&mut ctx, alpha);
+        }
+        if let Some(gfx) = self.gfx.as_mut() {
+            gfx.end_frame();
         }
         if self.exit {
             event_loop.exit();
@@ -174,21 +208,41 @@ impl<G: Game> ApplicationHandler for Runner<G> {
                     self.cfg.size.0,
                     self.cfg.size.1,
                 ));
-            self.window = Some(event_loop.create_window(attrs).expect("create window"));
+            let window = Arc::new(event_loop.create_window(attrs).expect("create window"));
+            self.gfx = Graphics::new(Arc::clone(&window), self.cfg.vsync);
+            if self.gfx.is_none() {
+                log::warn!("no GPU adapter — running without rendering");
+            }
+            self.window = Some(window);
         }
         if self.game.is_none() {
-            let mut ctx = Context::new(self.time, &mut self.exit, self.window.as_ref());
+            let mut ctx = Context::new(
+                self.time,
+                &mut self.exit,
+                self.window.as_deref(),
+                self.gfx.as_mut(),
+            );
             self.game = Some(G::init(&mut ctx));
         }
     }
 
-    fn window_event(&mut self, _event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => self.exit = true,
-            WindowEvent::RedrawRequested => self.draw_frame(_event_loop),
+            WindowEvent::Resized(size) => {
+                if let Some(gfx) = self.gfx.as_mut() {
+                    gfx.resize(size.width, size.height);
+                }
+            }
+            WindowEvent::RedrawRequested => self.draw_frame(event_loop),
             ref other => {
                 if let Some(game) = self.game.as_mut() {
-                    let mut ctx = Context::new(self.time, &mut self.exit, self.window.as_ref());
+                    let mut ctx = Context::new(
+                        self.time,
+                        &mut self.exit,
+                        self.window.as_deref(),
+                        self.gfx.as_mut(),
+                    );
                     game.event(&mut ctx, other);
                 }
             }

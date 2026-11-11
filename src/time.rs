@@ -21,7 +21,10 @@ pub struct Time {
 impl Time {
     /// A `Time` configured for the given fixed step (Hz). FPS starts at 0.
     pub fn with_fixed_hz(hz: f32) -> Self {
-        Self { fixed_delta: 1.0 / hz, ..Default::default() }
+        Self {
+            fixed_delta: 1.0 / hz,
+            ..Default::default()
+        }
     }
 }
 
@@ -45,7 +48,10 @@ impl FixedStep {
     const MAX_STEPS: usize = 5;
 
     pub fn new(step: f32) -> Self {
-        Self { accumulator: 0.0, step }
+        Self {
+            accumulator: 0.0,
+            step,
+        }
     }
 
     /// Feed a frame delta; returns the number of fixed steps due this frame.
@@ -83,7 +89,11 @@ mod tests {
     fn one_step_per_frame_at_60fps() {
         let mut fs = FixedStep::new(STEP);
         for frame in 0..240 {
-            assert_eq!(fs.tick(STEP), 1, "frame {frame} should owe exactly one step");
+            assert_eq!(
+                fs.tick(STEP),
+                1,
+                "frame {frame} should owe exactly one step"
+            );
         }
     }
 
@@ -110,7 +120,10 @@ mod tests {
             fed += dt;
         }
         assert!((steps as f32 * STEP + fs.accumulator - fed).abs() < 1e-6);
-        assert!(steps >= 3, "6 × ⅔ step owes 4 steps (±f32 eps), got {steps}");
+        assert!(
+            steps >= 3,
+            "6 × ⅔ step owes 4 steps (±f32 eps), got {steps}"
+        );
     }
 
     #[test]
@@ -121,7 +134,10 @@ mod tests {
         // The stall's leftover time is dropped, so the next frame is not
         // another full burst — that is the whole point of the guard.
         let next = fs.tick(0.0);
-        assert!(next <= 1, "after a capped burst the loop recovers, got {next}");
+        assert!(
+            next <= 1,
+            "after a capped burst the loop recovers, got {next}"
+        );
         assert_eq!(fs.tick(STEP), 1, "steady state resumes");
     }
 
